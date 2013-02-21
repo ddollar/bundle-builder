@@ -34,9 +34,9 @@ app.get "/", (req, res) ->
 
 app.get "/apps/:app/bundle.tgz", (req, res) ->
   return res.send("must authenticate", 403) unless req.user
-  log.start "fetch", (log) ->
-    app = req.params.app
-    api = heroku.init(req.user)
+  app = req.params.app
+  api = heroku.init(req.user)
+  log.start "fetch", app:app, (log) ->
     api.get "/apps/#{app}/release_slug", (err, release) ->
       fetch_slug release.slug_url, (err, slug) ->
         return res.send(err, 403) if err
