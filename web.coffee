@@ -90,7 +90,7 @@ inject_env = (tgz, config, cb) ->
       exec "gzip -d #{tgz}", (err, stdout, stderr) ->
         tar = tgz.replace(/\.tgz$/, ".tar")
         exec "fakeroot tar rf #{tar} ./.env", cwd:path, (err, stdout, stderr) ->
-          exec "gzip -9 tgz #{tar}", (err, stdout, stderr) ->
+          exec "gzip -1 tgz #{tar}", (err, stdout, stderr) ->
             tgz = tar.replace(/\.tar$/, ".tar.gz")
             log.success()
             cb null, tgz
