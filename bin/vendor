@@ -1,0 +1,11 @@
+#!/bin/sh
+
+squashfs_source="http://downloads.sourceforge.net/project/squashfs/squashfs/squashfs4.2/squashfs4.2.tar.gz"
+squashfs_buildpack="https://gist.github.com/ddollar/a2ceb7b9699f05303170/raw/build-squashfs.sh"
+
+root=$(dirname $(dirname $0))
+slug=$(anvil build $squashfs_source -b $squashfs_buildpack -p)
+
+cd $root/bin
+curl $slug | tar xzv
+cd -

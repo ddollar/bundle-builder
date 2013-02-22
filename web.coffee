@@ -127,7 +127,7 @@ convert_to_tgz = (slug, cb) ->
           log.success type:"tgz"
           cb null, tgz
       else
-        log.error "unknown slug type"
+        log.error new Error("unknown slug type: #{stdout}")
         cb "error fetching slug"
 
 inject_env = (tgz, config, cb) ->
