@@ -40,6 +40,7 @@ app.get "/apps/:app/bundle", (req, res) ->
   api = heroku.init(req.user)
   log.start "download", app:app, (log) ->
     api.get "/apps/#{app}/release_slug", (err, release) ->
+      return res.send(release.error, 403) if release.error
       fetch_slug release.slug_url, (err, slug) ->
         return res.send(err, 403) if err
         convert_to_tgz slug, (err, tgz) ->
