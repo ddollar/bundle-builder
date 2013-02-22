@@ -8,6 +8,8 @@ fs      = require("fs")
 log     = require("./lib/logger").init("slug-converter")
 spawn   = require("child_process").spawn
 temp    = require("temp")
+url     = require("url")
+uuid    = require("node-uuid")
 
 delay = (ms, cb) -> setTimeout  cb, ms
 every = (ms, cb) -> setInterval cb, ms
@@ -32,11 +34,11 @@ app.use (err, req, res, next) -> res.send 500, (if err.message? then err.message
 app.get "/", (req, res) ->
   res.send "ok"
 
-app.get "/apps/:app/bundle.tgz", (req, res) ->
+app.get "/apps/:app/bundle", (req, res) ->
   return res.send("must authenticate", 403) unless req.user
   app = req.params.app
   api = heroku.init(req.user)
-  log.start "fetch", app:app, (log) ->
+  log.start "download", app:app, (log) ->
     api.get "/apps/#{app}/release_slug", (err, release) ->
       fetch_slug release.slug_url, (err, slug) ->
         return res.send(err, 403) if err
@@ -48,7 +50,54 @@ app.get "/apps/:app/bundle.tgz", (req, res) ->
               log.success()
               res.sendfile tgz
 
+app.post "/apps/:app/bundle", (req, res) ->
+  return res.send("must specify bundle", 403) unless req.files.bundle
+  app = req.params.app
+  api = heroku.init(req.user)
+  log.start "upload", app:app, (log) ->
+    api.get "/apps/#{app}/releases/new", (err, release) ->
+      extract_slug_env req.files.bundle.path, (err, slug, env) ->
+        fs.stat slug, (err, stats) ->
+          slug_stream = fs.createReadStream(slug)
+          slug_stream.on "open", ->
+            options = url.parse(release.slug_put_url)
+            options.method = "PUT"
+            options.headers = { "Content-Length":stats.size }
+            s3_req = http.request options, (s3_res) ->
+              payload = coffee.helpers.merge release,
+                slug_version: 2
+                run_deploy_hooks: false
+                user: req.body.user || "unknown@example.org"
+                release_descr: req.body.description || "generic import description"
+                head: uuid.v4()
+              api.put "/apps/#{app}/config_vars", env, (err, test) ->
+                api.post "/apps/#{app}/releases", payload, (err, release) ->
+                  log.success()
+                  res.send JSON.stringify(release)
+            slug_stream.pipe s3_req
+
 app.listen (process.env.PORT || 5000)
+
+extract_slug_env = (bundle, cb) ->
+  log.start "extract_slug_env", (log) ->
+    temp.mkdir "extract", (err, path) ->
+      exec "tar xzf #{bundle}", cwd:path, (err, stdout, stderr) ->
+        read_env "#{path}/.env", (err, env) ->
+          fs.unlink "#{path}/.env", (err) ->
+            temp.mkdir "recombine", (err, rec_path) ->
+              exec "mksquashfs #{path} #{rec_path}/slug.img -all-root", (err, stdout, stderr) ->
+                log.success()
+                cb null, "#{rec_path}/slug.img", env
+
+read_env = (file, cb) ->
+  fs.readFile file, (err, data) ->
+    cb err, data.toString().split("\n").reduce(
+      (ax, line) ->
+        parts = line.split("=")
+        key = parts.shift()
+        ax[key] = parts.join("=") unless key is ""
+        ax
+      {})
 
 fetch_slug = (url, cb) ->
   log.start "fetch_slug", (log) ->
